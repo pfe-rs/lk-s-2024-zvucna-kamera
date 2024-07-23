@@ -32,7 +32,7 @@ speed_of_sound = 343  # Speed of sound in m/s
 sample_rate = 24000 # Hz
 
 
-with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.2) as ser:
+with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.01) as ser:
 
     x_data, y_data = [], []
 

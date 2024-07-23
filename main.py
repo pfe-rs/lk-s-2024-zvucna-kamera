@@ -29,7 +29,7 @@ def generate_steering_vectors(M, d, angles, wavelength):
 x_data, y_data = [], []
 M = 2
 speed_of_sound = 343  # Speed of sound in m/s
-sample_rate = 48000 # Hz
+sample_rate = 24000 # Hz
 
 
 with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.2) as ser:
@@ -53,12 +53,12 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.2) as ser:
             ser.timeout = 0.01
             c = 0
             while not c:
-                c = ser.read()
+                c = ser.read(1)
 
             ser.timeout = 0.2
             data = ser.read(16384 - 1)
 
-            data = c + data
+            data = data + c
 
             if len(data) < 16384:
                 return
@@ -68,15 +68,16 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.2) as ser:
 
             time_values = np.linspace(0, num_samples / sample_rate, num_samples)
 
-            line1.set_data(time_values, data1)
-            line2.set_data(time_values, data2)
-            ax1.relim()
-            ax1.autoscale_view()
 
             data1 = np.array(data1)
             data2 = np.array(data2)
             data1 = 2 * (data1 / 255) - 1
             data2 = 2 * (data2 / 255) - 1
+
+            line1.set_data(time_values, data1)
+            line2.set_data(time_values, data2)
+            ax1.relim()
+            ax1.autoscale_view()
 
             # pretvaranje signala u sinusoidu najizrazenije frekvencije
             d1_fft_peak = (abs(np.fft.fft(data1))/num_samples)**2
@@ -109,17 +110,17 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.2) as ser:
             ax2.autoscale_view()
             ax2.set_xlim((0, 5000))
 
-            #R = np.cov(received_signals)
-            R = corr_matrix_estimate(received_signals.T, imp="mem_eff")
+            R = np.cov(received_signals)
+            #R = corr_matrix_estimate(received_signals.T, imp="mem_eff")
 
 
             angle_grid = np.linspace(-90, 90, 181)
             steering_vectors = generate_steering_vectors(M, spacing, angle_grid, wavelength)
-            ula_scanning_vectors = gen_ula_scanning_vectors([0, spacing],angle_grid)
-            Bartlett = DOA_Bartlett(R,steering_vectors)
-            #mvdr_output = mvdr_beamforming(R, steering_vectors)
-            DOA_plot(Bartlett, angle_grid, log_scale_min = -50)
-            line5.set_data(angle_grid, Bartlett)
+            #ula_scanning_vectors = gen_ula_scanning_vectors([0, spacing],angle_grid)
+            #Bartlett = DOA_Bartlett(R,steering_vectors)
+            mvdr_output = mvdr_beamforming(R, steering_vectors)
+            #DOA_plot(Bartlett, angle_grid, log_scale_min = -50)
+            line5.set_data(angle_grid, mvdr_output)
             ax3.relim()
             ax3.autoscale_view()
 

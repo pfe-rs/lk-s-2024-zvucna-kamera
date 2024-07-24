@@ -2,29 +2,32 @@ from matplotlib import pyplot
 from matplotlib.animation import FuncAnimation
 from pyargus.directionEstimation import *
 import serial
+import traceback
 import numpy as np
+import math
 
-# Perform MVDR beamforming
-def mvdr_beamforming(R, steering_vectors):
-    num_angles = steering_vectors.shape[1]
-    output_power = np.zeros(num_angles)
-
-    for i in range(num_angles):
-        a_theta = steering_vectors[:, i]
-        a_theta_H = np.conjugate(a_theta).T
-        numerator = np.dot(a_theta_H, a_theta)
-        denominator = np.dot(np.dot(a_theta_H, np.linalg.inv(R)), a_theta)
-        output_power[i] = np.abs(numerator / denominator)
-
-    return output_power
-# Generate steering vectors manually
-def generate_steering_vectors(M, d, angles, wavelength):
-    steering_vectors = np.zeros((M, len(angles)), dtype=complex)
-    for idx, angle in enumerate(angles):
-        theta = np.deg2rad(angle)
-        for m in range(M):
-            steering_vectors[m, idx] = np.exp(-1j * 2 * np.pi * d * m * np.sin(theta) / wavelength)
-    return steering_vectors
+def delay_and_sum(signal, angle_grid, sample_rate, num_samples, d):
+    u = 343 # [m/s]
+    dist_per_sample = u/sample_rate
+    count = int((10*d) / dist_per_sample)
+    _max = -100000000
+    tdoa = 0
+    for i in range(count):
+        temp1 = np.dot(signal[0], np.concatenate((np.roll(signal[1], i)[i:], np.zeros(i,dtype = int))))
+        if i == 0:
+            temp2 = -1000000
+        else:
+            temp2 = np.dot(signal[0], np.concatenate((np.zeros(i,dtype = int), np.roll(signal[1], -i)[:-i])))
+        
+        if temp1 > _max:
+            _max = temp1
+            tdoa = i
+        if temp2 > _max:
+            _max = temp1
+            tdoa = -i
+    tdoa = tdoa/sample_rate
+    power = 180*math.acos((u*tdoa)/d)/math.pi-90
+    return power
 
 x_data, y_data = [], []
 M = 2
@@ -41,13 +44,10 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.01) as ser:
     line2, = ax1.plot(x_data, y_data, '-.')
 
     line3, = ax2.plot(x_data, y_data, '-')
-    line4, = ax2.plot(x_data, y_data, '-.')
-
-    line5, = ax3.plot(x_data, y_data, '-')
 
     def update(frame):
         try:
-            spacing = 0.018
+            spacing = 0.058
             num_samples = 8192
 
             ser.timeout = 0.01
@@ -68,35 +68,27 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.01) as ser:
 
             time_values = np.linspace(0, num_samples / sample_rate, num_samples)
 
-
-            data1 = np.array(data1)
-            data2 = np.array(data2)
-            data1 = 2 * (data1 / 255) - 1
-            data2 = 2 * (data2 / 255) - 1
+            data1 = 2 * (np.array(data1) / 255) - 1
+            data2 = 2 * (np.array(data2) / 255) - 1
 
             line1.set_data(time_values, data1)
             line2.set_data(time_values, data2)
             ax1.relim()
             ax1.autoscale_view()
 
-            d1_fft = np.fft.fft(data1)
-            d2_fft = np.fft.fft(data2)
-
-
-            line3.set_data(np.fft.fftfreq(len(data1)) * sample_rate, d1_fft)
-            line4.set_data(np.fft.fftfreq(len(data2)) * sample_rate, d2_fft)
-            ax2.relim()
-            ax2.autoscale_view()
-            ax2.set_xlim((0, 5000))
-
-            #line5.set_data(angle_grid, #ovde ide output beamformera )
-            ax3.relim()
-            ax3.autoscale_view()
+            signal = np.vstack((data1, data2))
+            angle_grid = np.linspace(-90, 90, 181)
+            power = delay_and_sum(signal, angle_grid, sample_rate, num_samples, spacing)
+            print(power)
+            #line3.set_data(angle_grid, power)
+            #ax2.relim()
+            #ax2.autoscale_view()
 
         except KeyboardInterrupt:
             exit()
         except Exception as e:
             print(e)
+            traceback.print_exc()   
             return
     animation = FuncAnimation(fig, update, interval=0.2)
 

@@ -1,6 +1,6 @@
 from matplotlib import pyplot
 from matplotlib.animation import FuncAnimation
-from pyargus.directionEstimation import *
+# from pyargus.directionEstimation import *
 import serial
 import numpy as np
 
@@ -32,62 +32,72 @@ speed_of_sound = 343  # Speed of sound in m/s
 sample_rate = 24000 # Hz
 
 
-with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.01) as ser:
+num_channels = 9
+num_samples = 4096
+num_bytes = num_channels * num_samples
+
+with serial.Serial('COM10', 10000000, timeout=0.01) as ser:
 
     x_data, y_data = [], []
 
     fig, (ax1, ax2, ax3) = pyplot.subplots(3, 1)
-    line1, = ax1.plot(x_data, y_data, '-')
-    line2, = ax1.plot(x_data, y_data, '-.')
-
-    line3, = ax2.plot(x_data, y_data, '-')
-    line4, = ax2.plot(x_data, y_data, '-.')
-
-    line5, = ax3.plot(x_data, y_data, '-')
+    lines = []
+    for i in range(num_channels):
+        lines.append(ax1.plot(x_data, y_data, '-')[0])
+    
 
     def update(frame):
         try:
-            spacing = 0.018
-            num_samples = 8192
-
+            
             ser.timeout = 0.01
             c = 0
             while not c:
                 c = ser.read(1)
 
-            ser.timeout = 0.2
-            data = ser.read(16384 - 1)
+            ser.timeout = 0.15
+            data = ser.read(num_bytes - 1)
 
-            data = data + c
 
-            if len(data) < 16384:
+            data = c + data
+
+
+            if len(data) < num_bytes:
                 return
             data = [int(x) for x in data]
-            data1=data[0:(16384//2)]
-            data2=data[16384//2:16384]
+            
+            datas=[]
+            for i in range(num_channels):
+
+                datas.append(data[i*num_samples:(i+1)*num_samples])
 
             time_values = np.linspace(0, num_samples / sample_rate, num_samples)
 
+            for i in range(num_channels):
+                datas[i] = np.array(datas[i])
+                datas[i] = 2 * (datas[i] / 255) - 1
+            # data1 = np.array(data1)
+            # data2 = np.array(data2)
+            # data1 = 2 * (data1 / 255) - 1
+            # data2 = 2 * (data2 / 255) - 1
 
-            data1 = np.array(data1)
-            data2 = np.array(data2)
-            data1 = 2 * (data1 / 255) - 1
-            data2 = 2 * (data2 / 255) - 1
-
-            line1.set_data(time_values, data1)
-            line2.set_data(time_values, data2)
+            for i in range(num_channels):
+                lines[i].set_data(time_values, datas[i])
             ax1.relim()
             ax1.autoscale_view()
 
+
             # pretvaranje signala u sinusoidu najizrazenije frekvencije
-            d1_fft_peak = (abs(np.fft.fft(data1))/num_samples)**2
-            d2_fft_peak = (abs(np.fft.fft(data2))/num_samples)**2
+            # d1_fft_peak = (abs(np.fft.fft(data[0]))/num_samples)**2
+            # d2_fft_peak = (abs(np.fft.fft(data[1]))/num_samples)**2
 
-            d1_fft = np.fft.fft(data1)
-            d2_fft = np.fft.fft(data2)
+            # d1_fft = np.fft.fft(data[0])
+            # d2_fft = np.fft.fft(data[1])
 
-            magnitudes = np.abs(d1_fft_peak)
-            sig_index = np.argmax(magnitudes[1:])
+            # magnitudes = np.abs(d1_fft_peak)
+            # sig_index = np.argmax(magnitudes[1:])
+
+
+            return
 
             signal_freq = (sample_rate/num_samples)*sig_index  # Hz
             wavelength = speed_of_sound / signal_freq  # Wavelength of the signal
@@ -126,9 +136,9 @@ with serial.Serial('/dev/ttyACM0', 10000000, timeout=0.01) as ser:
 
         except KeyboardInterrupt:
             exit()
-        except Exception as e:
-            print(e)
-            return
-    animation = FuncAnimation(fig, update, interval=0.2)
+        # except Exception as e:
+        #     print(e)
+        #     return
+    animation = FuncAnimation(fig, update, interval=0.25)
 
     pyplot.show()
